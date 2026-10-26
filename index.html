@@ -1,0 +1,1096 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Two Guards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&family=Baloo+2:wght@600;700&family=Hind:wght@400;600&display=swap">
+<style>
+/* Layout: a torchlit pixel-art dungeon stage on top, a two-step console (ask, then choose) below. Single dark look by choice. */
+:root {
+  --bg: #14161d;
+  --stone: #1d2030;
+  --panel: #232736;
+  --line: #363c50;
+  --ink: #ece4cf;
+  --muted: #a7a092;
+  --torch: #f2a83b;
+  --torch-ink: #1d1407;
+  --good: #8ccf7f;
+  --bad: #ea6f56;
+  --bubble-ink: #1b1712;
+  --f-display: "Pixelify Sans", "Courier New", monospace;
+  --f-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+/* Pixelify Sans has no Devanagari, so Hindi swaps in faces that do. */
+:root[lang="hi"] {
+  --f-display: "Baloo 2", "Pixelify Sans", system-ui, sans-serif;
+  --f-body: "Hind", "Atkinson Hyperlegible", system-ui, sans-serif;
+}
+:root[lang="hi"] .step-label, :root[lang="hi"] .tag, :root[lang="hi"] .log .lbl { letter-spacing: 0; text-transform: none; }
+:root[lang="hi"] body { font-size: 17px; }
+:root[lang="hi"] .step-label, :root[lang="hi"] .log .lbl { font-size: 0.9rem; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 16px;
+  line-height: 1.5;
+}
+.wrap {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Header */
+.top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px 32px; }
+.top-text { min-width: 0; max-width: 62ch; display: flex; flex-direction: column; gap: 6px; }
+h1 {
+  margin: 0;
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: clamp(2rem, 5vw, 2.9rem);
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  text-wrap: balance;
+}
+h1 em { font-style: normal; color: var(--torch); }
+.rules { margin: 0; color: var(--muted); }
+.rules b { color: var(--ink); font-weight: 700; }
+
+/* Stage */
+.stage {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 2px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+  background: #0b0c10;
+}
+.stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.stage.shake { animation: shake 420ms steps(6) 1; }
+@keyframes shake {
+  0%,100% { transform: translate(0,0); }
+  20% { transform: translate(-4px,2px); }
+  40% { transform: translate(4px,-2px); }
+  60% { transform: translate(-3px,1px); }
+  80% { transform: translate(2px,-1px); }
+}
+
+.bubble {
+  position: absolute;
+  bottom: 51%;
+  transform: translateX(-50%);
+  max-width: 34%;
+  background: var(--ink);
+  color: var(--bubble-ink);
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: clamp(12px, 1.9vw, 20px);
+  line-height: 1.15;
+  padding: 0.35em 0.65em;
+  border: 2px solid var(--bubble-ink);
+  box-shadow: 0 0 0 2px var(--ink), 4px 4px 0 2px rgba(0,0,0,0.45);
+  white-space: nowrap;
+  animation: pop 220ms steps(3) 1;
+}
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  width: 8px;
+  height: 8px;
+  background: var(--ink);
+  border-right: 2px solid var(--bubble-ink);
+  border-bottom: 2px solid var(--bubble-ink);
+  transform: translateX(-50%) rotate(45deg);
+}
+@keyframes pop { from { transform: translateX(-50%) scale(0.6); } to { transform: translateX(-50%) scale(1); } }
+
+.tag {
+  position: absolute;
+  bottom: 61%;
+  transform: translateX(-50%);
+  font-family: var(--f-display);
+  font-size: clamp(10px, 1.4vw, 14px);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.15em 0.5em;
+  border: 2px solid currentColor;
+  background: rgba(10,11,15,0.75);
+  color: var(--muted);
+  pointer-events: none;
+}
+@media (max-width: 560px) { .tag { bottom: 65%; } }
+.tag.truth { color: var(--good); }
+.tag.liar { color: var(--bad); }
+.tag.dim { opacity: 0; }
+
+.banner {
+  position: absolute;
+  left: 50%;
+  top: 7%;
+  transform: translateX(-50%);
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: clamp(18px, 4.2vw, 44px);
+  white-space: nowrap;
+  text-shadow: 3px 3px 0 #000, -1px -1px 0 #000;
+  pointer-events: none;
+}
+.banner.good { color: var(--good); }
+.banner.bad { color: var(--bad); }
+.banner.shuffle { color: var(--torch); font-size: clamp(14px, 3vw, 30px); }
+
+/* Console */
+.console { display: grid; grid-template-columns: 1.25fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 760px) { .console { grid-template-columns: 1fr; } }
+/* Upright phones: keep the scene in view while the question list scrolls under it. */
+@media (max-width: 760px) and (min-height: 560px) {
+  .stage { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; }
+  .card { scroll-margin-top: calc((100vw - 32px) * 0.5625 + 20px + env(safe-area-inset-top, 0px)); }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+}
+.card {
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.step-head { display: flex; flex-direction: column; gap: 2px; }
+.step-label { font-family: var(--f-display); font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--torch); }
+h2 { margin: 0; font-family: var(--f-display); font-weight: 700; font-size: 1.3rem; line-height: 1.2; }
+.note { margin: 0; color: var(--muted); font-size: 0.92rem; }
+
+.seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.seg button {
+  font: 700 0.95rem var(--f-display);
+  padding: 9px 10px;
+  background: var(--stone);
+  color: var(--muted);
+  border: 0;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bubble-ink); }
+.seg button:disabled { cursor: default; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sound-btn {
+  font: 700 0.95rem var(--f-display);
+  padding: 6px 12px;
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--stone);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.sound-btn[aria-pressed="true"] { background: var(--ink); color: var(--bubble-ink); }
+.sound-btn[aria-pressed="true"] .off, .sound-btn[aria-pressed="false"] .on { display: none; }
+.lang { grid-template-columns: auto auto auto; }
+.lang button { padding: 6px 14px; }
+.lang button[lang="hi"] { font-family: "Baloo 2", system-ui, sans-serif; }
+.swatch { width: 10px; height: 10px; display: inline-block; border: 1px solid rgba(0,0,0,0.5); }
+.swatch.l { background: #9a3f3a; }
+.swatch.r { background: #3e5f94; }
+
+.qs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.qs button {
+  width: 100%;
+  text-align: left;
+  font: 400 0.98rem/1.35 var(--f-body);
+  color: var(--ink);
+  background: var(--stone);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.qs button:hover:not(:disabled) { border-color: var(--torch); }
+.qs button:disabled { opacity: 0.4; cursor: default; }
+.qs button.asked { opacity: 1; border-color: var(--torch); background: rgba(242,168,59,0.12); }
+
+.log { background: var(--stone); border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.log .lbl { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+.log .q { font-style: italic; }
+.log .a { font-family: var(--f-display); font-size: 1.1rem; color: var(--torch); }
+
+.doors { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.door-btn {
+  font: 700 1.05rem var(--f-display);
+  padding: 12px 10px;
+  background: var(--torch);
+  color: var(--torch-ink);
+  border: 0;
+  border-radius: 4px;
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,0.25);
+  cursor: pointer;
+}
+.door-btn:hover:not(:disabled) { filter: brightness(1.08); }
+.door-btn:disabled { opacity: 0.35; cursor: default; }
+.door-btn.chosen:disabled { opacity: 1; box-shadow: inset 0 -3px 0 rgba(0,0,0,0.25), 0 0 0 2px var(--ink); }
+
+.result { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 14px; }
+.result h3 { margin: 0; font-family: var(--f-display); font-size: 1.35rem; }
+.result h3.good { color: var(--good); }
+.result h3.bad { color: var(--bad); }
+.result p { margin: 0; }
+.result .facts { color: var(--muted); font-size: 0.92rem; }
+.next {
+  align-self: flex-start;
+  font: 700 1rem var(--f-display);
+  padding: 9px 16px;
+  background: transparent;
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.next:hover { background: var(--ink); color: var(--bubble-ink); }
+
+button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stage.shake, .bubble { animation: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="top-text">
+      <h1 data-t="title">The <em>Two</em> Guards</h1>
+      <p class="rules" data-t="rules">Two doors. One leads out of the dungeon, the other into the dragon's lair. One guard <b>always tells the truth</b>, the other <b>always lies</b>, and they look exactly alike. You get <b>one question</b> to one guard.</p>
+    </div>
+    <div class="controls">
+      <div class="seg lang" role="group" id="lang-group" aria-label="Language">
+        <button id="lang-en" lang="en" aria-pressed="true">English</button>
+        <button id="lang-hi" lang="hi" aria-pressed="false">हिन्दी</button>
+        <button id="lang-hl" lang="hi-Latn" aria-pressed="false">Hinglish</button>
+      </div>
+      <button class="sound-btn" id="sound" aria-pressed="true">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z" fill="currentColor"/><path class="on" d="M11 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6 6 0 0 1 0 9" fill="none" stroke="currentColor" stroke-width="1.5"/><path class="off" d="M11 6l4 4M15 6l-4 4" stroke="currentColor" stroke-width="1.5"/></svg>
+        <span data-t="sound">Sound</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="stage" id="stage">
+    <canvas id="scene" width="192" height="108" role="img" aria-label="A dungeon wall with two wooden doors, a guard standing beside each door, and torches burning between them."></canvas>
+    <div class="tag" id="tag-L" style="left:34.4%">?</div>
+    <div class="tag" id="tag-R" style="left:65.6%">?</div>
+    <div class="bubble" id="bubble" hidden aria-live="polite"></div>
+    <div class="banner" id="banner" hidden></div>
+  </div>
+
+  <div class="console">
+    <section class="card" aria-labelledby="h-ask">
+      <div class="step-head">
+        <span class="step-label" data-t="step1">Step 1</span>
+        <h2 id="h-ask" data-t="ask">Ask one question</h2>
+      </div>
+      <div class="seg" role="group" id="pick-group" aria-label="Which guard to ask">
+        <button id="pick-L" aria-pressed="true"><span class="swatch l"></span><span data-t="pickL">Left guard</span></button>
+        <button id="pick-R" aria-pressed="false"><span class="swatch r"></span><span data-t="pickR">Right guard</span></button>
+      </div>
+      <ul class="qs" id="qs"></ul>
+    </section>
+
+    <section class="card" aria-labelledby="h-door">
+      <div class="step-head">
+        <span class="step-label" data-t="step2">Step 2</span>
+        <h2 id="h-door" data-t="door">Choose a door</h2>
+      </div>
+      <p class="note" id="nudge" data-t="nudge">Ask your question first. The doors unlock once a guard has answered, and then you can also click a door in the scene.</p>
+      <div class="log" id="log" hidden>
+        <span class="lbl" id="log-who"></span>
+        <span class="q" id="log-q"></span>
+        <span class="a" id="log-a"></span>
+      </div>
+      <div class="doors">
+        <button class="door-btn" id="door-L" data-t="openL">Open left door</button>
+        <button class="door-btn" id="door-R" data-t="openR">Open right door</button>
+      </div>
+      <div class="result" id="result" hidden aria-live="polite">
+        <h3 id="r-title"></h3>
+        <p id="r-facts"></p>
+        <p class="facts" data-t="explain">Be ready to explain why you chose this door.</p>
+        <button class="next" id="next" data-t="next">↻ New round</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const W = 192, H = 108, FLOOR = 88;
+  const DOORS = { L: { x: 22, top: 36, w: 32 }, R: { x: 138, top: 36, w: 32 } };
+  const GUARDS = { L: { x: 60 }, R: { x: 120 } };
+  const TABARDS = [
+    { c: '#9a3f3a', l: '#b8554e', n: 'red' },
+    { c: '#3e5f94', l: '#5277b0', n: 'blue' },
+    { c: '#3f7a4a', l: '#55995f', n: 'green' },
+    { c: '#7a4a8c', l: '#9663a8', n: 'purple' },
+    { c: '#8a6a2a', l: '#a8863c', n: 'mustard' }
+  ];
+  const WOODS = [['#6e4524', '#7a4d29'], ['#5a3a22', '#694528'], ['#7b5230', '#8a5e38'], ['#4f3420', '#5e3e27']];
+  const HOP_MS = 230;
+  const pickOne = list => list[Math.floor(Math.random() * list.length)];
+  const coin = () => Math.random() < 0.5;
+  const shuffled = list => {
+    const a = list.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  };
+  const TORCHES = [{ x: 10, y: 46 }, { x: 96, y: 44 }, { x: 182, y: 46 }];
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const pinnedStage = window.matchMedia('(max-width: 760px) and (min-height: 560px)');
+
+  // r packs each question's four possible replies into bits (see answerFor).
+  const QUESTIONS = [
+    { id: 'which', r: 9,  point: true, text: 'Which door leads out?',
+      hi: 'कौन-सा दरवाज़ा बाहर ले जाता है?',
+      hl: 'Kaunsa darwaaza bahar le jaata hai?' },
+    { id: 'lair',  r: 6,  point: true, text: "Which door leads to the dragon's lair?",
+      hi: 'कौन-सा दरवाज़ा ड्रैगन की मांद में ले जाता है?',
+      hl: 'Kaunsa darwaaza dragon ki maand mein le jaata hai?' },
+    { id: 'other', r: 5,  point: true, text: 'If I asked the other guard which door leads out, which would he point to?',
+      hi: 'अगर मैं दूसरे पहरेदार से पूछूँ कि कौन-सा दरवाज़ा बाहर ले जाता है, तो वह किस दरवाज़े की ओर इशारा करेगा?',
+      hl: 'Agar main doosre guard se poochhun ki kaunsa darwaaza bahar le jaata hai, toh woh kis darwaaze ki taraf ishaara karega?' },
+    { id: 'liar',  r: 0,  text: 'Are you the guard who lies?',
+      hi: 'क्या आप ही झूठ बोलने वाले पहरेदार हैं?',
+      hl: 'Kya aap hi jhooth bolne waale guard hain?' },
+    { id: 'left',  r: 9,  text: 'Does the left door lead out?',
+      hi: 'क्या बायाँ दरवाज़ा बाहर ले जाता है?',
+      hl: 'Kya left darwaaza bahar le jaata hai?' },
+    { id: 'olair', r: 10, point: true, text: "If I asked the other guard which door leads to the dragon's lair, which would he point to?",
+      hi: 'अगर मैं दूसरे पहरेदार से पूछूँ कि कौन-सा दरवाज़ा ड्रैगन की मांद में ले जाता है, तो वह किस दरवाज़े की ओर इशारा करेगा?',
+      hl: 'Agar main doosre guard se poochhun ki kaunsa darwaaza dragon ki maand mein le jaata hai, toh woh kis darwaaze ki taraf ishaara karega?' },
+    { id: 'sun',   r: 12, text: 'Does the sun rise in the east?',
+      hi: 'क्या सूरज पूरब में उगता है?',
+      hl: 'Kya suraj east mein ugta hai?' },
+    { id: 'oleft', r: 5,  text: 'Would the other guard say that the left door leads out?',
+      hi: 'क्या दूसरा पहरेदार कहेगा कि बायाँ दरवाज़ा बाहर ले जाता है?',
+      hl: 'Kya doosra guard kahega ki left darwaaza bahar le jaata hai?' },
+    { id: 'right', r: 6,  text: 'Does the right door lead out?',
+      hi: 'क्या दायाँ दरवाज़ा बाहर ले जाता है?',
+      hl: 'Kya right darwaaza bahar le jaata hai?' },
+    { id: 'self',  r: 10, point: true, text: 'If I asked you which door leads out, which would you point to?',
+      hi: 'अगर मैं आपसे पूछूँ कि कौन-सा दरवाज़ा बाहर ले जाता है, तो आप किस दरवाज़े की ओर इशारा करेंगे?',
+      hl: 'Agar main aapse poochhun ki kaunsa darwaaza bahar le jaata hai, toh aap kis darwaaze ki taraf ishaara karenge?' },
+    { id: 'oliar', r: 15, text: 'Is the other guard the liar?',
+      hi: 'क्या दूसरा पहरेदार झूठा है?',
+      hl: 'Kya doosra guard jhootha hai?' }
+  ];
+
+  // ---------- Language ----------
+  const TEXT = {
+    en: {
+      title: 'The <em>Two</em> Guards',
+      rules: "Two doors. One leads out of the dungeon, the other into the dragon's lair. One guard <b>always tells the truth</b>, the other <b>always lies</b>, and they look exactly alike. You get <b>one question</b> to one guard.",
+      sound: 'Sound', langGroup: 'Language', scene: 'A dungeon wall with two wooden doors, a guard standing beside each door, and torches burning between them.',
+      step1: 'Step 1', ask: 'Ask one question', pickGroup: 'Which guard to ask', pickL: 'Left guard', pickR: 'Right guard',
+      step2: 'Step 2', door: 'Choose a door',
+      nudge: 'Ask your question first. The doors unlock once a guard has answered, and then you can also click a door in the scene.',
+      openL: 'Open left door', openR: 'Open right door',
+      explain: 'Be ready to explain why you chose this door.', next: '↻ New round',
+      asked: k => `You asked the ${name(k)} guard`,
+      points: k => `He points to the ${name(k)} door.`,
+      says: a => `He says "${a}"`,
+      yes: 'Yes.', no: 'No.', thatL: '← That door.', thatR: 'That door. →',
+      truth: 'Truth', liar: 'Liar',
+      shuffle: 'The guards are changing places…', daylight: 'Daylight!', dragon: 'The dragon wakes',
+      escaped: 'You escaped', lair: "Into the dragon's lair",
+      facts: (l, s) => `This round the ${name(l)} guard was the liar, and the ${name(s)} door was the way out.`
+    },
+    hi: {
+      title: '<em>दो</em> पहरेदार',
+      rules: 'दो दरवाज़े हैं। एक कालकोठरी से बाहर ले जाता है, दूसरा ड्रैगन की मांद में। एक पहरेदार <b>हमेशा सच बोलता है</b>, दूसरा <b>हमेशा झूठ बोलता है</b>, और दोनों बिल्कुल एक जैसे दिखते हैं। आप किसी एक पहरेदार से सिर्फ़ <b>एक सवाल</b> पूछ सकते हैं।',
+      sound: 'आवाज़', langGroup: 'भाषा', scene: 'कालकोठरी की दीवार में लकड़ी के दो दरवाज़े, हर दरवाज़े के पास खड़ा एक पहरेदार, और बीच में जलती मशालें।',
+      step1: 'चरण 1', ask: 'एक सवाल पूछें', pickGroup: 'किस पहरेदार से पूछें', pickL: 'बायाँ पहरेदार', pickR: 'दायाँ पहरेदार',
+      step2: 'चरण 2', door: 'दरवाज़ा चुनें',
+      nudge: 'पहले अपना सवाल पूछें। पहरेदार के जवाब देने के बाद ही दरवाज़ा चुना जा सकता है, और तब आप दृश्य में किसी दरवाज़े पर टैप भी कर सकते हैं।',
+      openL: 'बायाँ दरवाज़ा खोलें', openR: 'दायाँ दरवाज़ा खोलें',
+      explain: 'बताने के लिए तैयार रहें कि आपने यह दरवाज़ा क्यों चुना।', next: '↻ नया राउंड',
+      asked: k => `आपने ${k === 'L' ? 'बाएँ' : 'दाएँ'} पहरेदार से पूछा`,
+      points: k => `वह ${k === 'L' ? 'बाएँ' : 'दाएँ'} दरवाज़े की ओर इशारा करता है।`,
+      says: a => `वह कहता है, "${a}"`,
+      yes: 'हाँ।', no: 'नहीं।', thatL: '← वह दरवाज़ा।', thatR: 'वह दरवाज़ा। →',
+      truth: 'सच्चा', liar: 'झूठा',
+      shuffle: 'पहरेदार जगह बदल रहे हैं…', daylight: 'उजाला!', dragon: 'ड्रैगन जाग गया',
+      escaped: 'आप बच निकले', lair: 'ड्रैगन की मांद में',
+      facts: (l, s) => `इस राउंड में ${l === 'L' ? 'बायाँ' : 'दायाँ'} पहरेदार झूठा था, और ${s === 'L' ? 'बायाँ' : 'दायाँ'} दरवाज़ा बाहर का रास्ता था।`
+    },
+    hl: {
+      title: '<em>Do</em> Guards',
+      rules: 'Do darwaaze hain. Ek dungeon se bahar le jaata hai, doosra dragon ki maand mein. Ek guard <b>hamesha sach bolta hai</b>, doosra <b>hamesha jhooth bolta hai</b>, aur dono bilkul ek jaise dikhte hain. Aap kisi ek guard se sirf <b>ek sawaal</b> pooch sakte hain.',
+      sound: 'Sound', langGroup: 'Bhasha', scene: 'Dungeon ki deewar mein lakdi ke do darwaaze, har darwaaze ke paas khada ek guard, aur beech mein jalti mashaalein.',
+      step1: 'Step 1', ask: 'Ek sawaal poochiye', pickGroup: 'Kis guard se poochna hai', pickL: 'Left guard', pickR: 'Right guard',
+      step2: 'Step 2', door: 'Darwaaza chuniye',
+      nudge: 'Pehle apna sawaal poochiye. Guard ke jawaab ke baad hi darwaaza chuna ja sakta hai, aur tab aap scene mein kisi darwaaze par tap bhi kar sakte hain.',
+      openL: 'Left wala kholiye', openR: 'Right wala kholiye',
+      explain: 'Batane ke liye ready rahiye ki aapne yeh darwaaza kyun chuna.', next: '↻ Naya round',
+      asked: k => `Aapne ${name(k)} guard se poocha`,
+      points: k => `Woh ${name(k)} darwaaze ki taraf ishaara karta hai.`,
+      says: a => `Woh kehta hai, "${a}"`,
+      yes: 'Haan.', no: 'Nahi.', thatL: '← Woh wala.', thatR: 'Woh wala. →',
+      truth: 'Sachcha', liar: 'Jhootha',
+      shuffle: 'Guards jagah badal rahe hain…', daylight: 'Ujaala!', dragon: 'Dragon jaag gaya',
+      escaped: 'Aap bach nikle', lair: 'Dragon ki maand mein',
+      facts: (l, s) => `Is round mein ${name(l)} guard jhootha tha, aur ${name(s)} darwaaza bahar ka raasta tha.`
+    }
+  };
+  const LANGS = { en: 'en', hi: 'hi', hl: 'hi-Latn' };
+  const LANG_KEY = 'twoGuards.lang';
+  let lang = 'en';
+  try { const l = localStorage.getItem(LANG_KEY); if (LANGS[l]) lang = l; } catch (e) {}
+  const T = () => TEXT[lang];
+  const qText = id => { const q = QUESTIONS.find(x => x.id === id); return lang === 'en' ? q.text : q[lang]; };
+
+  // ---------- Sound ----------
+  // Every sound is synthesised with Web Audio, so there is nothing to download.
+  // Browsers only allow audio after the first tap or key press, so nothing plays before that.
+  const SOUND_KEY = 'twoGuards.sound';
+  let soundOn = true;
+  try { if (localStorage.getItem(SOUND_KEY) === 'off') soundOn = false; } catch (e) {}
+  let ac = null, master = null, noiseBuf = null, unlocked = false;
+  function unlock() {
+    unlocked = true;
+    if (!soundOn) return;
+    if (!ac) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      try { ac = new AC(); } catch (e) { return; }
+      master = ac.createGain(); master.gain.value = 0.6; master.connect(ac.destination);
+      noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (ac.state === 'suspended') ac.resume().catch(() => {});
+  }
+  window.addEventListener('pointerdown', unlock, true);
+  window.addEventListener('keydown', unlock, true);
+  const live = () => soundOn && unlocked && ac && ac.state !== 'closed';
+  function envelope(g, t, vol, dur) {
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  }
+  function tone(freq, dur, o = {}) {
+    if (!live()) return;
+    const t = ac.currentTime + 0.01 + (o.at || 0);
+    const osc = ac.createOscillator(), g = ac.createGain();
+    osc.type = o.type || 'square';
+    osc.frequency.setValueAtTime(freq, t);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + dur);
+    envelope(g, t, o.vol || 0.06, dur);
+    osc.connect(g); g.connect(master);
+    osc.start(t); osc.stop(t + dur + 0.05);
+  }
+  function hiss(dur, o = {}) {
+    if (!live()) return;
+    const t = ac.currentTime + 0.01 + (o.at || 0);
+    const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = noiseBuf; src.loop = true;
+    f.type = o.filter || 'lowpass';
+    f.frequency.setValueAtTime(o.freq || 800, t);
+    if (o.to) f.frequency.exponentialRampToValueAtTime(o.to, t + dur);
+    envelope(g, t, o.vol || 0.1, dur);
+    src.connect(f); f.connect(g); g.connect(master);
+    src.start(t); src.stop(t + dur + 0.05);
+  }
+  const SFX = {
+    tick: () => tone(880, 0.05, { type: 'triangle', vol: 0.05 }),
+    hop: () => { hiss(0.07, { freq: 500, vol: 0.12 }); tone(110, 0.07, { type: 'sine', to: 70, vol: 0.12 }); },
+    speak: n => { for (let i = 0; i < n; i++) tone(170 + Math.random() * 90, 0.06, { at: i * 0.085, vol: 0.045 }); },
+    creak: () => { tone(70, 0.85, { type: 'sawtooth', to: 150, vol: 0.035 }); hiss(0.85, { filter: 'bandpass', freq: 300, to: 900, vol: 0.05 }); },
+    escape: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.22, { type: 'triangle', at: i * 0.1, vol: 0.07 })),
+    roar: () => { hiss(1.3, { freq: 1400, to: 160, vol: 0.28 }); tone(120, 1.2, { type: 'sawtooth', to: 40, vol: 0.09 }); }
+  };
+
+  const other = s => (s === 'L' ? 'R' : 'L');
+  const name = s => (s === 'L' ? 'left' : 'right');
+
+  // ---------- State ----------
+  let st;
+  function newRound() {
+    const a = Math.floor(Math.random() * TABARDS.length);
+    const b = (a + 1 + Math.floor(Math.random() * (TABARDS.length - 1))) % TABARDS.length;
+    const look = () => ({ wood: pickOne(WOODS), plank: pickOne([6, 7, 8]), band: pickOne([10, 14, 18]), handle: pickOne([27, 30, 33]) });
+    const hops = reduced ? 0 : 5 + Math.floor(Math.random() * 4);
+    const startSwap = coin();
+    st = {
+      safe: coin() ? 'L' : 'R',
+      liar: coin() ? 'L' : 'R',
+      target: 'L', asked: null, answer: null, answerSide: null, answerAt: 0,
+      chosen: null, open: 0, openStart: 0, phase: hops ? 'shuffle' : 'play', hover: null,
+      bodies: [{ tab: TABARDS[a], slot: startSwap ? 'R' : 'L' }, { tab: TABARDS[b], slot: startSwap ? 'L' : 'R' }],
+      looks: { L: look(), R: look() },
+      order: shuffled(QUESTIONS.map(q => q.id)),
+      hops, lastHop: -1, shuffleStart: performance.now()
+    };
+    orderQuestions();
+    renderUI();
+  }
+  function endShuffle() {
+    if (st.hops % 2) st.bodies.forEach(b => { b.slot = other(b.slot); });
+    st.phase = 'play';
+    renderUI();
+  }
+  const tabOf = slot => st.bodies.find(b => b.slot === slot).tab;
+
+  // One round per device: once a question is asked, a reload brings back the same round.
+  const KEY = 'twoGuards.round';
+  function save() {
+    const r = { s: st.safe, l: st.liar, t: st.answerSide, q: st.asked, c: st.chosen, b: st.bodies.map(b => [TABARDS.indexOf(b.tab), b.slot]), k: st.looks, o: st.order };
+    try { localStorage.setItem(KEY, btoa(JSON.stringify(r))); } catch (e) {}
+  }
+  function restore() {
+    try {
+      const r = JSON.parse(atob(localStorage.getItem(KEY) || ''));
+      const side = v => v === 'L' || v === 'R';
+      if (![r.s, r.l, r.t].every(side) || !QUESTIONS.some(q => q.id === r.q) || (r.c && !side(r.c))) return false;
+      const bodies = r.b.map(([i, slot]) => ({ tab: TABARDS[i], slot }));
+      if (bodies.length !== 2 || bodies.some(b => !b.tab || !side(b.slot)) || bodies[0].slot === bodies[1].slot) return false;
+      const ids = QUESTIONS.map(q => q.id);
+      const order = Array.isArray(r.o) && r.o.length === ids.length && ids.every(id => r.o.includes(id)) ? r.o : ids;
+      st = {
+        safe: r.s, liar: r.l, target: r.t, asked: r.q, answer: null, answerSide: r.t, answerAt: -1e9,
+        chosen: r.c || null, open: r.c ? 1 : 0, openStart: 0, phase: r.c ? 'done' : 'play', hover: null,
+        bodies, looks: r.k, order, hops: 0, shuffleStart: 0
+      };
+      st.answer = answerFor(st.asked, st.answerSide);
+      orderQuestions();
+      renderUI();
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // Bit (honest * 2 + safe-is-left) of r: 1 means the left door, or "Yes."
+  function answerFor(q, g) {
+    const Q = QUESTIONS.find(x => x.id === q);
+    const bit = (Q.r >> ((g !== st.liar) * 2 + (st.safe === 'L'))) & 1;
+    return Q.point ? { type: 'point', door: bit ? 'L' : 'R' } : { type: 'say', yes: !!bit };
+  }
+
+  // ---------- Canvas ----------
+  const cv = document.getElementById('scene');
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  function archSpan(x, top, w, y) {
+    const r = w / 2, cx = x + r;
+    if (y < top + r) {
+      const dy = (top + r) - (y + 0.5);
+      const half = Math.sqrt(Math.max(0, r * r - dy * dy));
+      return [Math.round(cx - half), Math.round(cx + half)];
+    }
+    return [x, x + w];
+  }
+
+  function buildWall() {
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    let seed = 11;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    g.fillStyle = '#1b1e27'; g.fillRect(0, 0, W, H);
+    const bricks = ['#363b4a', '#323746', '#3b4051', '#2e3341', '#343849'];
+    for (let r = 0; r * 6 < FLOOR; r++) {
+      const y = r * 6, off = r % 2 ? 6 : 0;
+      for (let x = -off; x < W; x += 12) {
+        g.fillStyle = bricks[Math.floor(rnd() * bricks.length)]; g.fillRect(x, y, 11, 5);
+        g.fillStyle = 'rgba(255,255,255,0.05)'; g.fillRect(x, y, 11, 1);
+        if (rnd() < 0.15) { g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(x + 2 + Math.floor(rnd() * 6), y + 1 + Math.floor(rnd() * 3), 2, 1); }
+      }
+    }
+    // floor
+    g.fillStyle = '#262833'; g.fillRect(0, FLOOR, W, H - FLOOR);
+    g.fillStyle = '#3c3f4c'; g.fillRect(0, FLOOR, W, 1);
+    const rows = [FLOOR + 1, FLOOR + 6, FLOOR + 13, H];
+    for (let i = 0; i < rows.length - 1; i++) {
+      g.fillStyle = '#1c1e27'; g.fillRect(0, rows[i + 1] - 1, W, 1);
+      const step = 14 + i * 6, off = i % 2 ? step / 2 : 0;
+      for (let x = off; x < W; x += step) g.fillRect(Math.round(x), rows[i], 1, rows[i + 1] - rows[i] - 1);
+    }
+    // door frames
+    for (const k of ['L', 'R']) {
+      const d = DOORS[k];
+      for (let y = d.top - 4; y < FLOOR; y++) {
+        const [a, b] = archSpan(d.x - 4, d.top - 4, d.w + 8, y);
+        g.fillStyle = '#20232c'; g.fillRect(a, y, b - a, 1);
+      }
+      const stones = ['#5b5f6e', '#666a79', '#525665'];
+      for (let y = d.top - 3; y < FLOOR; y++) {
+        const [a, b] = archSpan(d.x - 3, d.top - 3, d.w + 6, y);
+        for (let px = a; px < b; px++) {
+          const idx = (Math.floor(y / 4) * 5 + Math.floor((px + (Math.floor(y / 4) % 2) * 2) / 4) * 3) % 3;
+          g.fillStyle = stones[idx];
+          g.fillRect(px, y, 1, 1);
+        }
+      }
+      // keystone
+      g.fillStyle = '#767a89'; g.fillRect(d.x + d.w / 2 - 2, d.top - 4, 4, 4);
+      // step
+      g.fillStyle = '#44485a'; g.fillRect(d.x - 5, FLOOR, d.w + 10, 2);
+    }
+    // torch brackets
+    for (const t of TORCHES) {
+      g.fillStyle = '#26262c'; g.fillRect(t.x - 1, t.y, 3, 7);
+      g.fillStyle = '#4c4c55'; g.fillRect(t.x - 2, t.y - 1, 5, 2);
+    }
+    // ceiling shade
+    const gr = g.createLinearGradient(0, 0, 0, 42);
+    gr.addColorStop(0, 'rgba(0,0,0,0.6)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, W, 42);
+    return c;
+  }
+
+  function buildVignette() {
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    const gr = g.createRadialGradient(W / 2, H * 0.6, 30, W / 2, H * 0.6, 120);
+    gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0.55)');
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    return c;
+  }
+
+  function buildFreedom() {
+    const dw = 32, dh = FLOOR - 36;
+    const c = document.createElement('canvas'); c.width = dw; c.height = dh;
+    const g = c.getContext('2d');
+    const sky = g.createLinearGradient(0, 0, 0, 36);
+    sky.addColorStop(0, '#6cb2e0'); sky.addColorStop(1, '#f7e2a3');
+    g.fillStyle = sky; g.fillRect(0, 0, dw, dh);
+    g.fillStyle = '#fff6c9'; g.fillRect(19, 12, 5, 5); g.fillRect(18, 13, 7, 3); g.fillRect(20, 11, 3, 7);
+    g.fillStyle = '#ffffff'; g.fillRect(5, 8, 6, 2); g.fillRect(7, 7, 3, 1);
+    for (let x = 0; x < dw; x++) {
+      const h1 = 34 + Math.round(3 * Math.sin(x / 5));
+      g.fillStyle = '#5c9446'; g.fillRect(x, h1, 1, dh - h1);
+      const h2 = 42 + Math.round(2 * Math.sin(x / 4 + 2));
+      g.fillStyle = '#77ad55'; g.fillRect(x, h2, 1, dh - h2);
+    }
+    g.fillStyle = '#d4bb80';
+    for (let y = 40; y < dh; y++) { const half = 1 + (y - 40) * 0.35; g.fillRect(Math.round(16 - half), y, Math.round(half * 2), 1); }
+    return c;
+  }
+
+  const doomCv = document.createElement('canvas'); doomCv.width = 32; doomCv.height = FLOOR - 36;
+  const dg = doomCv.getContext('2d');
+  let fire = new Array(32).fill(8);
+  let flick = TORCHES.map(() => 0.5);
+  let lastFlick = 0;
+
+  function drawDoom(t) {
+    const dw = doomCv.width, dh = doomCv.height;
+    dg.fillStyle = '#140606'; dg.fillRect(0, 0, dw, dh);
+    const gr = dg.createLinearGradient(0, 20, 0, dh);
+    gr.addColorStop(0, 'rgba(90,18,10,0)'); gr.addColorStop(1, 'rgba(150,35,14,0.9)');
+    dg.fillStyle = gr; dg.fillRect(0, 0, dw, dh);
+    // dragon eyes
+    if ((t % 3400) > 160) {
+      dg.fillStyle = '#ffd23a'; dg.fillRect(9, 22, 3, 1); dg.fillRect(20, 22, 3, 1);
+      dg.fillStyle = '#ff8a2a'; dg.fillRect(10, 23, 1, 1); dg.fillRect(21, 23, 1, 1);
+    }
+    for (let x = 0; x < dw; x++) {
+      const h = fire[x];
+      for (let i = 0; i < h; i++) {
+        const f = i / h;
+        dg.fillStyle = f < 0.4 ? '#b8321e' : f < 0.75 ? '#e8702a' : '#f6c445';
+        dg.fillRect(x, dh - 1 - i, 1, 1);
+      }
+    }
+  }
+
+  const wall = buildWall();
+  const vignette = buildVignette();
+  const freedom = buildFreedom();
+
+  function drawDoor(side, t) {
+    const d = DOORS[side];
+    const look = st.looks[side];
+    const isChosen = st.chosen === side;
+    const o = isChosen ? st.open : 0;
+    let content = null;
+    if (o > 0) { if (side === st.safe) content = freedom; else { drawDoom(t); content = doomCv; } }
+    const pw = Math.max(0, Math.round(d.w * (1 - o * 0.92)));
+    const ps = side === 'L' ? d.x : d.x + d.w - pw;
+    const pe = ps + pw;
+    for (let y = d.top; y < FLOOR; y++) {
+      const [x0, x1] = archSpan(d.x, d.top, d.w, y);
+      if (content) ctx.drawImage(content, x0 - d.x, y - d.top, x1 - x0, 1, x0, y, x1 - x0, 1);
+      else { ctx.fillStyle = '#0d0e12'; ctx.fillRect(x0, y, x1 - x0, 1); }
+      const a = Math.max(x0, ps), b = Math.min(x1, pe);
+      const band = y === d.top + look.band || y === d.top + look.band + 1 || y === FLOOR - 12 || y === FLOOR - 11;
+      for (let px = a; px < b; px++) {
+        const u = side === 'L' ? (px - ps) / pw : (pe - 1 - px) / pw;
+        const col = u * d.w;
+        let c = look.wood[Math.floor(col / look.plank) % 2];
+        if (col % look.plank < 1) c = '#3f2614';
+        if (band) c = '#26262b';
+        if (band && Math.floor(col) % look.plank === 4) c = '#55555e';
+        ctx.fillStyle = c; ctx.fillRect(px, y, 1, 1);
+      }
+      if (b > a && o > 0) { ctx.fillStyle = `rgba(0,0,0,${o * 0.45})`; ctx.fillRect(a, y, b - a, 1); }
+      if (b > a && st.hover === side && st.phase === 'play') { ctx.fillStyle = 'rgba(242,168,59,0.13)'; ctx.fillRect(a, y, b - a, 1); }
+    }
+    if (pw > 6) {
+      const hx = side === 'L' ? ps + Math.round(pw * 0.84) : pe - 1 - Math.round(pw * 0.84);
+      ctx.fillStyle = '#d9b347'; ctx.fillRect(hx - (side === 'L' ? 1 : 0), d.top + look.handle, 2, 2);
+    }
+    if (o > 0) {
+      const col = side === st.safe ? '255,236,180' : '235,85,40';
+      for (let y = FLOOR; y < H; y++) {
+        const s = (y - FLOOR) * 0.7;
+        ctx.fillStyle = `rgba(${col},${0.22 * o * (1 - (y - FLOOR) / 26)})`;
+        ctx.fillRect(Math.round(d.x - s), y, Math.round(d.w + s * 2), 1);
+      }
+    }
+  }
+
+  const GUARD = [
+    '....hhhh....',
+    '...hHHhhh...',
+    '..hHhhhhhh..',
+    '..hhhhhhhh..',
+    '.khhhhhhhhk.',
+    '..kkkkkkkk..',
+    '..sesssses..',
+    '..ssssssss..',
+    '...ssmmss...',
+    '....ssss....',
+    '.ccaaaaaacc.',
+    'ccaaaaaaaacc',
+    'ccaAaaaaaacc',
+    'ccaaaEEaaacc',
+    'ccaaEEEEaacc',
+    'ccaaaEEaaacc',
+    'ccaaaaaaaacc',
+    'ccbbbBBbbbcc',
+    'ssaaaaaaaass',
+    '.aaaaaaaaaa.',
+    '.aaaaaaaaaa.',
+    '..lll..lll..',
+    '..lll..lll..',
+    '..lll..lll..',
+    '..lll..lll..',
+    '.ffff..ffff.',
+    '.ffff..ffff.'
+  ];
+  const GTOP = FLOOR - GUARD.length;
+  const OUTLINE = '#0d0e13';
+
+  function drawBody(body, gx, lift, t) {
+    const side = body.slot;
+    let top = GTOP - lift;
+    if (!reduced && st.phase !== 'shuffle' && st.answerSide === side && t - st.answerAt < 900) top -= Math.floor((t - st.answerAt) / 150) % 2;
+    const pal = { h: '#8a8f9c', H: '#c9ced8', k: '#1b1d24', s: '#d9a77c', e: '#1b1d24', m: '#7a4a3a', c: '#6d7280', a: body.tab.c, A: body.tab.l, E: '#d9b347', b: '#3a2a1c', B: '#d9b347', l: '#2e3140', f: '#1e1a17' };
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(gx - 1, FLOOR - 1, 14, 2);
+    // spear
+    const sx = gx < 90 ? gx - 2 : gx + 13;
+    ctx.fillStyle = OUTLINE; ctx.fillRect(sx - 1, top - 11, 3, FLOOR - top + 10);
+    ctx.fillStyle = '#7a5530'; ctx.fillRect(sx, top - 10, 1, FLOOR - top + 9);
+    ctx.fillStyle = OUTLINE; ctx.fillRect(sx - 2, top - 15, 5, 5);
+    ctx.fillStyle = '#cfd3dc'; ctx.fillRect(sx, top - 14, 1, 4); ctx.fillRect(sx - 1, top - 12, 3, 2);
+    // pointing arm
+    let arm = null;
+    if (st.answer && st.answer.type === 'point' && st.answerSide === side) {
+      const dir = st.answer.door === 'L' ? -1 : 1;
+      arm = dir < 0 ? { x: gx - 8, hand: gx - 10 } : { x: gx + 12, hand: gx + 20 };
+    }
+    // outline pass
+    ctx.fillStyle = OUTLINE;
+    for (let r = 0; r < GUARD.length; r++) for (let c = 0; c < 12; c++) {
+      if (GUARD[r][c] !== '.') ctx.fillRect(gx + c - 1, top + r - 1, 3, 3);
+    }
+    if (arm) { ctx.fillRect(Math.min(arm.x, arm.hand) - 1, top + 10, 11, 4); }
+    for (let r = 0; r < GUARD.length; r++) for (let c = 0; c < 12; c++) {
+      const ch = GUARD[r][c];
+      if (ch === '.') continue;
+      ctx.fillStyle = pal[ch]; ctx.fillRect(gx + c, top + r, 1, 1);
+    }
+    if (arm) {
+      ctx.fillStyle = pal.c; ctx.fillRect(arm.x, top + 11, 8, 2);
+      ctx.fillStyle = pal.s; ctx.fillRect(arm.hand, top + 11, 2, 2);
+    }
+  }
+
+  function drawTorches() {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    TORCHES.forEach((tc, i) => {
+      const R = 36 + flick[i] * 6;
+      const gr = ctx.createRadialGradient(tc.x, tc.y - 3, 0, tc.x, tc.y - 3, R);
+      gr.addColorStop(0, `rgba(255,165,70,${0.22 + flick[i] * 0.06})`);
+      gr.addColorStop(1, 'rgba(255,165,70,0)');
+      ctx.fillStyle = gr; ctx.fillRect(tc.x - R, tc.y - 3 - R, R * 2, R * 2);
+    });
+    ctx.restore();
+    TORCHES.forEach((tc, i) => {
+      const hf = 4 + Math.round(flick[i] * 3);
+      ctx.fillStyle = '#d8502a'; ctx.fillRect(tc.x - 1, tc.y - 1 - hf, 3, hf);
+      ctx.fillStyle = '#f6b544'; ctx.fillRect(tc.x, tc.y - hf, 1, hf - 1);
+      ctx.fillStyle = '#fff0b0'; ctx.fillRect(tc.x, tc.y - hf + 1, 1, 1);
+    });
+  }
+
+  function loop(t) {
+    if (!reduced && t - lastFlick > 90) {
+      lastFlick = t;
+      flick = flick.map(() => Math.random());
+      fire = fire.map((v, i) => 6 + Math.round(Math.random() * 9 + 3 * Math.sin(i / 3 + t / 300)));
+    }
+    if (st.phase === 'opening') {
+      const p = reduced ? 1 : Math.min(1, (t - st.openStart) / 950);
+      st.open = 1 - Math.pow(1 - p, 3);
+      if (p >= 1) finish();
+    }
+    ctx.drawImage(wall, 0, 0);
+    drawDoor('L', t); drawDoor('R', t);
+    let pos = st.bodies.map(b => ({ x: GUARDS[b.slot].x, lift: 0 }));
+    if (st.phase === 'shuffle') {
+      const el = Math.max(0, t - st.shuffleStart);
+      const k = Math.floor(el / HOP_MS);
+      if (k >= st.hops) {
+        endShuffle();
+        pos = st.bodies.map(b => ({ x: GUARDS[b.slot].x, lift: 0 }));
+      } else {
+        if (k !== st.lastHop) { st.lastHop = k; SFX.hop(); }
+        const f = (el % HOP_MS) / HOP_MS;
+        const e = f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2;
+        pos = st.bodies.map((b, i) => {
+          const from = k % 2 ? other(b.slot) : b.slot;
+          const to = other(from);
+          return {
+            x: Math.round(GUARDS[from].x + (GUARDS[to].x - GUARDS[from].x) * e),
+            lift: Math.round(Math.sin(Math.PI * f) * (i === 0 ? 9 : 3))
+          };
+        });
+      }
+    }
+    drawBody(st.bodies[1], pos[1].x, pos[1].lift, t);
+    drawBody(st.bodies[0], pos[0].x, pos[0].lift, t);
+    drawTorches();
+    ctx.drawImage(vignette, 0, 0);
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- UI ----------
+  const $ = id => document.getElementById(id);
+  const qs = $('qs');
+  QUESTIONS.forEach(q => {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.id = 'q-' + q.id; b.dataset.q = q.id; b.textContent = q.text;
+    b.addEventListener('click', () => ask(q.id));
+    li.appendChild(b); qs.appendChild(li);
+  });
+  function orderQuestions() {
+    st.order.forEach(id => qs.appendChild($('q-' + id).parentNode));
+  }
+
+  function applyLang() {
+    const t = T();
+    document.documentElement.lang = LANGS[lang];
+    document.querySelectorAll('[data-t]').forEach(el => { el.innerHTML = t[el.dataset.t]; });
+    $('lang-group').setAttribute('aria-label', t.langGroup);
+    $('pick-group').setAttribute('aria-label', t.pickGroup);
+    $('scene').setAttribute('aria-label', t.scene);
+    QUESTIONS.forEach(q => { $('q-' + q.id).textContent = qText(q.id); });
+    Object.keys(LANGS).forEach(l => $('lang-' + l).setAttribute('aria-pressed', String(lang === l)));
+    renderUI();
+  }
+  function setLang(l) {
+    if (l !== lang) SFX.tick();
+    lang = l;
+    try { localStorage.setItem(LANG_KEY, l); } catch (e) {}
+    applyLang();
+  }
+  Object.keys(LANGS).forEach(l => $('lang-' + l).addEventListener('click', () => setLang(l)));
+
+  const renderSound = () => $('sound').setAttribute('aria-pressed', String(soundOn));
+  $('sound').addEventListener('click', () => {
+    soundOn = !soundOn;
+    try { localStorage.setItem(SOUND_KEY, soundOn ? 'on' : 'off'); } catch (e) {}
+    if (soundOn) { unlock(); SFX.tick(); } else if (ac) ac.suspend().catch(() => {});
+    renderSound();
+  });
+  renderSound();
+
+  function pick(side) {
+    if (st.asked || st.phase !== 'play') return;
+    if (st.target !== side) SFX.tick();
+    st.target = side; renderUI();
+  }
+  $('pick-L').addEventListener('click', () => pick('L'));
+  $('pick-R').addEventListener('click', () => pick('R'));
+
+  function ask(q) {
+    if (st.asked || st.phase !== 'play') return;
+    st.asked = q;
+    st.answer = answerFor(q, st.target);
+    st.answerSide = st.target;
+    st.answerAt = performance.now();
+    save();
+    SFX.speak(st.answer.type === 'point' ? 3 : 2);
+    renderUI();
+    if (pinnedStage.matches) $('h-door').closest('.card').scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+  }
+
+  function choose(side) {
+    if (st.phase !== 'play' || !st.asked) return;
+    st.chosen = side; st.phase = 'opening'; st.openStart = performance.now(); st.hover = null;
+    save();
+    SFX.creak();
+    renderUI();
+  }
+  $('door-L').addEventListener('click', () => choose('L'));
+  $('door-R').addEventListener('click', () => choose('R'));
+  $('next').addEventListener('click', () => {
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    $('stage').classList.remove('shake');
+    newRound();
+    window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
+    qs.querySelector('button').focus({ preventScroll: true });
+  });
+
+  function finish() {
+    st.open = 1; st.phase = 'done';
+    if (st.chosen === st.safe) SFX.escape(); else SFX.roar();
+    if (st.chosen !== st.safe && !reduced) {
+      const s = $('stage'); s.classList.remove('shake'); void s.offsetWidth; s.classList.add('shake');
+    }
+    renderUI();
+  }
+
+  function sceneXY(e) {
+    const r = cv.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+  }
+  function hitDoor(p) {
+    for (const k of ['L', 'R']) { const d = DOORS[k]; if (p.x >= d.x - 3 && p.x <= d.x + d.w + 3 && p.y >= d.top - 3 && p.y <= FLOOR) return k; }
+    return null;
+  }
+  function hitGuard(p) {
+    for (const k of ['L', 'R']) { const g = GUARDS[k]; if (p.x >= g.x - 3 && p.x <= g.x + 15 && p.y >= GTOP - 14 && p.y <= FLOOR) return k; }
+    return null;
+  }
+  cv.addEventListener('mousemove', e => {
+    const p = sceneXY(e);
+    const d = st.phase === 'play' && st.asked ? hitDoor(p) : null;
+    const g = st.phase === 'play' && !st.asked ? hitGuard(p) : null;
+    st.hover = d;
+    cv.style.cursor = d || g ? 'pointer' : 'default';
+  });
+  cv.addEventListener('mouseleave', () => { st.hover = null; });
+  cv.addEventListener('click', e => {
+    const p = sceneXY(e);
+    const d = hitDoor(p); if (d) return choose(d);
+    const g = hitGuard(p); if (g) pick(g);
+  });
+
+  function renderUI() {
+    const play = st.phase === 'play';
+    ['L', 'R'].forEach(k => {
+      const b = $('pick-' + k);
+      b.setAttribute('aria-pressed', String(st.target === k));
+      b.disabled = !!st.asked || !play;
+      $('door-' + k).disabled = !play || !st.asked;
+      $('door-' + k).classList.toggle('chosen', st.chosen === k);
+      b.querySelector('.swatch').style.background = st.phase === 'shuffle' ? 'var(--line)' : tabOf(k).c;
+    });
+    qs.querySelectorAll('button').forEach(b => {
+      b.disabled = !!st.asked || !play;
+      b.classList.toggle('asked', b.dataset.q === st.asked);
+    });
+
+    // bubble
+    const t = T();
+    const bub = $('bubble');
+    if (st.answer) {
+      bub.hidden = false;
+      bub.style.left = st.answerSide === 'L' ? '34.4%' : '65.6%';
+      bub.textContent = st.answer.type === 'point'
+        ? (st.answer.door === 'L' ? t.thatL : t.thatR)
+        : (st.answer.yes ? t.yes : t.no);
+    } else bub.hidden = true;
+
+    // log
+    const log = $('log');
+    if (st.asked) {
+      log.hidden = false;
+      $('log-who').textContent = t.asked(st.answerSide);
+      $('log-q').textContent = '"' + qText(st.asked) + '"';
+      $('log-a').textContent = st.answer.type === 'point'
+        ? t.points(st.answer.door)
+        : t.says(st.answer.yes ? t.yes : t.no);
+      $('nudge').hidden = true;
+    } else { log.hidden = true; $('nudge').hidden = false; }
+
+    // tags
+    ['L', 'R'].forEach(k => {
+      const tg = $('tag-' + k);
+      if (st.phase === 'done') {
+        const liar = st.liar === k;
+        tg.className = 'tag ' + (liar ? 'liar' : 'truth');
+        tg.textContent = liar ? t.liar : t.truth;
+      } else {
+        tg.className = 'tag' + (st.answer || st.phase === 'shuffle' ? ' dim' : '');
+        tg.textContent = '?';
+      }
+    });
+
+    // result
+    const res = $('result'), ban = $('banner');
+    if (st.phase === 'done') {
+      const won = st.chosen === st.safe;
+      $('r-title').textContent = won ? t.escaped : t.lair;
+      $('r-title').className = won ? 'good' : 'bad';
+      $('r-facts').textContent = t.facts(st.liar, st.safe);
+      res.hidden = false;
+      ban.hidden = false;
+      ban.textContent = won ? t.daylight : t.dragon;
+      ban.className = 'banner ' + (won ? 'good' : 'bad');
+    } else {
+      res.hidden = true;
+      if (st.phase === 'shuffle') {
+        ban.hidden = false;
+        ban.textContent = t.shuffle;
+        ban.className = 'banner shuffle';
+      } else ban.hidden = true;
+    }
+  }
+
+  if (!restore()) newRound();
+  applyLang();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
