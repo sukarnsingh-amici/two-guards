@@ -190,6 +190,7 @@ h1 em { font-style: normal; color: var(--torch); }
 .step-label { font-family: var(--f-display); font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--torch); }
 h2 { margin: 0; font-family: var(--f-display); font-weight: 700; font-size: 1.3rem; line-height: 1.2; }
 .note { margin: 0; color: var(--muted); font-size: 0.92rem; }
+.note.cue { color: var(--torch); }
 
 .seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
 .seg button {
@@ -321,9 +322,10 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
         <h2 id="h-ask" data-t="ask">Ask one question</h2>
       </div>
       <div class="seg" role="group" id="pick-group" aria-label="Which guard to ask">
-        <button id="pick-L" aria-pressed="true"><span class="swatch l"></span><span data-t="pickL">Left guard</span></button>
+        <button id="pick-L" aria-pressed="false"><span class="swatch l"></span><span data-t="pickL">Left guard</span></button>
         <button id="pick-R" aria-pressed="false"><span class="swatch r"></span><span data-t="pickR">Right guard</span></button>
       </div>
+      <p class="note cue" id="pick-first" data-t="pickFirst" hidden>Choose which guard to ask first.</p>
       <ul class="qs" id="qs"></ul>
     </section>
 
@@ -421,6 +423,7 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
       rules: "Two doors. One leads out of the dungeon, the other into the dragon's lair. One guard <b>always tells the truth</b>, the other <b>always lies</b>, and they look exactly alike. You get <b>one question</b> to one guard.",
       sound: 'Sound', langGroup: 'Language', scene: 'A dungeon wall with two wooden doors, a guard standing beside each door, and torches burning between them.',
       step1: 'Step 1', ask: 'Ask one question', pickGroup: 'Which guard to ask', pickL: 'Left guard', pickR: 'Right guard',
+      pickFirst: 'Choose which guard to ask first.',
       step2: 'Step 2', door: 'Choose a door',
       nudge: 'Ask your question first. The doors unlock once a guard has answered, and then you can also click a door in the scene.',
       openL: 'Open left door', openR: 'Open right door',
@@ -439,6 +442,7 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
       rules: 'दो दरवाज़े हैं। एक कालकोठरी से बाहर ले जाता है, दूसरा ड्रैगन की मांद में। एक पहरेदार <b>हमेशा सच बोलता है</b>, दूसरा <b>हमेशा झूठ बोलता है</b>, और दोनों बिल्कुल एक जैसे दिखते हैं। आप किसी एक पहरेदार से सिर्फ़ <b>एक सवाल</b> पूछ सकते हैं।',
       sound: 'आवाज़', langGroup: 'भाषा', scene: 'कालकोठरी की दीवार में लकड़ी के दो दरवाज़े, हर दरवाज़े के पास खड़ा एक पहरेदार, और बीच में जलती मशालें।',
       step1: 'चरण 1', ask: 'एक सवाल पूछें', pickGroup: 'किस पहरेदार से पूछें', pickL: 'बायाँ पहरेदार', pickR: 'दायाँ पहरेदार',
+      pickFirst: 'पहले चुनें कि किस पहरेदार से पूछना है।',
       step2: 'चरण 2', door: 'दरवाज़ा चुनें',
       nudge: 'पहले अपना सवाल पूछें। पहरेदार के जवाब देने के बाद ही दरवाज़ा चुना जा सकता है, और तब आप दृश्य में किसी दरवाज़े पर टैप भी कर सकते हैं।',
       openL: 'बायाँ दरवाज़ा खोलें', openR: 'दायाँ दरवाज़ा खोलें',
@@ -457,6 +461,7 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
       rules: 'Do darwaaze hain. Ek dungeon se bahar le jaata hai, doosra dragon ki maand mein. Ek guard <b>hamesha sach bolta hai</b>, doosra <b>hamesha jhooth bolta hai</b>, aur dono bilkul ek jaise dikhte hain. Aap kisi ek guard se sirf <b>ek sawaal</b> pooch sakte hain.',
       sound: 'Sound', langGroup: 'Bhasha', scene: 'Dungeon ki deewar mein lakdi ke do darwaaze, har darwaaze ke paas khada ek guard, aur beech mein jalti mashaalein.',
       step1: 'Step 1', ask: 'Ek sawaal poochiye', pickGroup: 'Kis guard se poochna hai', pickL: 'Left guard', pickR: 'Right guard',
+      pickFirst: 'Pehle chuniye ki kis guard se poochna hai.',
       step2: 'Step 2', door: 'Darwaaza chuniye',
       nudge: 'Pehle apna sawaal poochiye. Guard ke jawaab ke baad hi darwaaza chuna ja sakta hai, aur tab aap scene mein kisi darwaaze par tap bhi kar sakte hain.',
       openL: 'Left wala kholiye', openR: 'Right wala kholiye',
@@ -553,7 +558,7 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
     st = {
       safe: coin() ? 'L' : 'R',
       liar: coin() ? 'L' : 'R',
-      target: 'L', asked: null, answer: null, answerSide: null, answerAt: 0,
+      target: null, asked: null, answer: null, answerSide: null, answerAt: 0,
       chosen: null, open: 0, openStart: 0, phase: hops ? 'shuffle' : 'play', hover: null,
       bodies: [{ tab: TABARDS[a], slot: startSwap ? 'R' : 'L' }, { tab: TABARDS[b], slot: startSwap ? 'L' : 'R' }],
       looks: { L: look(), R: look() },
@@ -956,7 +961,7 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
   $('pick-R').addEventListener('click', () => pick('R'));
 
   function ask(q) {
-    if (st.asked || st.phase !== 'play') return;
+    if (st.asked || st.phase !== 'play' || !st.target) return;
     st.asked = q;
     st.answer = answerFor(q, st.target);
     st.answerSide = st.target;
@@ -981,7 +986,7 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
     $('stage').classList.remove('shake');
     newRound();
     window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
-    qs.querySelector('button').focus({ preventScroll: true });
+    $('pick-L').focus({ preventScroll: true });
   });
 
   function finish() {
@@ -1030,9 +1035,10 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
       b.querySelector('.swatch').style.background = st.phase === 'shuffle' ? 'var(--line)' : tabOf(k).c;
     });
     qs.querySelectorAll('button').forEach(b => {
-      b.disabled = !!st.asked || !play;
+      b.disabled = !!st.asked || !play || !st.target;
       b.classList.toggle('asked', b.dataset.q === st.asked);
     });
+    $('pick-first').hidden = !play || !!st.target || !!st.asked;
 
     // bubble
     const t = T();
