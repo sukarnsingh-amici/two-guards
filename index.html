@@ -147,6 +147,7 @@ h1 em { font-style: normal; color: var(--torch); }
   pointer-events: none;
 }
 @media (max-width: 560px) { .tag { bottom: 65%; } }
+.tag.named { color: var(--ink); }
 .tag.truth { color: var(--good); }
 .tag.liar { color: var(--bad); }
 .tag.dim { opacity: 0; }
@@ -291,6 +292,20 @@ h2 { margin: 0; font-family: var(--f-display); font-weight: 700; font-size: 1.3r
 }
 .next:hover { background: var(--ink); color: var(--bubble-ink); }
 
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 4px; }
+.actions .next { margin-top: 0; }
+.walk-btn { padding: 9px 16px; font-size: 1rem; }
+
+/* Level 2: Knights and Knaves */
+.l2-card { order: 2; }
+.kk { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.kk-row { background: var(--stone); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.kk-row.right { border-color: var(--good); }
+.kk-row.wrong { border-color: var(--bad); }
+.kk-say { margin: 0; }
+.kk-say b { font-family: var(--f-display); font-size: 1.1rem; color: var(--torch); }
+.kk-say q { font-style: italic; }
+
 button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -302,8 +317,8 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
 <div class="wrap">
   <header class="top">
     <div class="top-text">
-      <h1 data-t="title">The <em>Two</em> Guards</h1>
-      <p class="rules" data-t="rules">Two doors. One leads out of the dungeon, the other into the dragon's lair. One guard <b>always tells the truth</b>, the other <b>always lies</b>, and they look exactly alike. You get <b>one question</b> to one guard.</p>
+      <h1 id="game-title">The <em>Two</em> Guards</h1>
+      <p class="rules" id="game-rules">Two doors. One leads out of the dungeon, the other into the dragon's lair. One guard <b>always tells the truth</b>, the other <b>always lies</b>, and they look exactly alike. You get <b>one question</b> to one guard.</p>
     </div>
     <div class="controls">
       <div class="seg lang" role="group" id="lang-group" aria-label="Language">
@@ -324,6 +339,9 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
         <canvas id="scene" width="192" height="108" role="img" aria-label="A dungeon wall with two wooden doors, a guard standing beside each door, and torches burning between them."></canvas>
         <div class="tag" id="tag-L" style="left:34.4%">?</div>
         <div class="tag" id="tag-R" style="left:65.6%">?</div>
+        <div class="tag" id="kk-tag-0" hidden></div>
+        <div class="tag" id="kk-tag-1" hidden></div>
+        <div class="tag" id="kk-tag-2" hidden></div>
         <div class="bubble" id="bubble" hidden aria-live="polite"></div>
         <div class="banner" id="banner" hidden></div>
       </div>
@@ -347,7 +365,10 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
           <h3 id="r-title"></h3>
           <p id="r-facts"></p>
           <p class="facts" data-t="explain">Be ready to explain why you chose this door.</p>
-          <button class="next" id="next" data-t="next">↻ New round</button>
+          <div class="actions">
+            <button class="door-btn walk-btn" id="walk" data-t="walk" hidden>Walk through the door →</button>
+            <button class="next" id="next" data-t="next">↻ New round</button>
+          </div>
         </div>
       </section>
     </div>
@@ -363,6 +384,25 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
       </div>
       <p class="note cue" id="pick-first" data-t="pickFirst" hidden>Choose which guard to ask first.</p>
       <ul class="qs" id="qs"></ul>
+    </section>
+
+    <section class="card l2-card" id="l2" hidden aria-labelledby="h-l2">
+      <div class="step-head">
+        <span class="step-label" data-t="l2Label">Level 2</span>
+        <h2 id="h-l2" data-t="l2Title">Knights and Knaves</h2>
+      </div>
+      <p class="note" data-t="l2Do">Read what each islander says, then mark each one as a knight or a knave.</p>
+      <ul class="kk" id="kk"></ul>
+      <p class="note cue" id="kk-cue" data-t="kkCue" hidden>Mark every islander first.</p>
+      <button class="door-btn" id="kk-lock" data-t="kkLock">Lock in my answer</button>
+      <div class="result" id="kk-result" hidden aria-live="polite">
+        <h3 id="kk-title"></h3>
+        <p id="kk-facts"></p>
+        <p class="facts" data-t="kkExplain">Be ready to explain your reasoning.</p>
+        <div class="actions">
+          <button class="next" id="kk-next" data-t="next">↻ New round</button>
+        </div>
+      </div>
     </section>
   </div>
 </div>
@@ -429,6 +469,53 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
       hl: 'Kya doosra guard jhootha hai?' }
   ];
 
+  // ---------- Level 2: Knights and Knaves ----------
+  // Knights always tell the truth and knaves always lie. Each kind of statement has a test f
+  // (k.A is true when A is a knight; y and z are the islanders it mentions) and its wording per language.
+  const SAY = {
+    knight:    { f: (k, y) => k[y],
+                 en: y => `${y} is a knight.`, hi: y => `${y} सत्यवादी है।`, hl: y => `${y} knight hai.` },
+    knave:     { f: (k, y) => !k[y],
+                 en: y => `${y} is a knave.`, hi: y => `${y} झूठा है।`, hl: y => `${y} knave hai.` },
+    diff:      { f: (k, y, z) => k[y] !== k[z],
+                 en: (y, z) => `${y} and ${z} are not the same kind.`, hi: (y, z) => `${y} और ${z} अलग-अलग किस्म के हैं।`, hl: (y, z) => `${y} aur ${z} alag-alag type ke hain.` },
+    ifThen:    { f: (k, y, z) => !k[y] || !k[z],
+                 en: (y, z) => `If ${y} is a knight, then ${z} is a knave.`, hi: (y, z) => `अगर ${y} सत्यवादी है, तो ${z} झूठा है।`, hl: (y, z) => `Agar ${y} knight hai, toh ${z} knave hai.` },
+    one:       { f: k => k.A + k.B + k.C === 1,
+                 en: () => 'Exactly one of us three is a knight.', hi: () => 'हम तीनों में से ठीक एक सत्यवादी है।', hl: () => 'Hum teeno mein se exactly ek knight hai.' },
+    two:       { f: k => k.A + k.B + k.C === 2,
+                 en: () => 'Exactly two of us three are knights.', hi: () => 'हम तीनों में से ठीक दो सत्यवादी हैं।', hl: () => 'Hum teeno mein se exactly do knights hain.' },
+    sayKnave:  { f: (k, y, z) => (k[y] ? !k[z] : k[z]),
+                 en: (y, z) => `${y} would say that ${z} is a knave.`, hi: (y, z) => `${y} कहेगा कि ${z} झूठा है।`, hl: (y, z) => `${y} kahega ki ${z} knave hai.` },
+    sayKnight: { f: (k, y, z) => (k[y] ? k[z] : !k[z]),
+                 en: (y, z) => `${y} would say that ${z} is a knight.`, hi: (y, z) => `${y} कहेगा कि ${z} सत्यवादी है।`, hl: (y, z) => `${y} kahega ki ${z} knight hai.` },
+    oneKnave:  { f: (k, y, z) => !k[y] || !k[z],
+                 en: (y, z) => `At least one of ${y} and ${z} is a knave.`, hi: (y, z) => `${y} और ${z} में से कम से कम एक झूठा है।`, hl: (y, z) => `${y} aur ${z} mein se kam se kam ek knave hai.` }
+  };
+  // What A, B and C say, in that order. Each puzzle has exactly one answer, needs all three
+  // statements, and no single statement settles anyone's type on its own.
+  const KK = [
+    ['diff B C', 'ifThen A C', 'knight A'],
+    ['diff B C', 'knave C', 'one'],
+    ['diff B C', 'knave C', 'two'],
+    ['ifThen B C', 'knight C', 'sayKnave A B'],
+    ['knave B', 'two', 'sayKnave A B'],
+    ['knave B', 'two', 'sayKnight A B'],
+    ['knight B', 'two', 'sayKnight A B'],
+    ['knight B', 'sayKnave A C', 'oneKnave A B']
+  ].map(lines => ({ says: lines.map((line, i) => { const [kind, y, z] = line.split(' '); return { who: 'ABC'[i], kind, y, z }; }) }));
+  const sayText = (s, l) => SAY[s.kind][l](s.y, s.z);
+  function solveKK(P) {
+    const people = P.says.map(s => s.who);
+    const fits = [];
+    for (let m = 0; m < 1 << people.length; m++) {
+      const k = {};
+      people.forEach((w, i) => { k[w] = !!(m & (1 << i)); });
+      if (P.says.every(s => SAY[s.kind].f(k, s.y, s.z) === k[s.who])) fits.push(k);
+    }
+    return fits.length === 1 ? fits[0] : null;
+  }
+
   // ---------- Language ----------
   const TEXT = {
     en: {
@@ -448,7 +535,18 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
       truth: 'Truth', liar: 'Liar',
       shuffle: 'The guards are changing places…', daylight: 'Daylight!', dragon: 'The dragon wakes',
       escaped: 'You escaped', lair: "Into the dragon's lair",
-      facts: (l, s) => `This round the ${name(l)} guard was the liar, and the ${name(s)} door was the way out.`
+      facts: (l, s) => `This round the ${name(l)} guard was the liar, and the ${name(s)} door was the way out.`,
+      walk: 'Walk through the door →',
+      l2Label: 'Level 2', l2Title: 'Who is who?', l2Name: 'Knights and <em>Knaves</em>',
+      l2Rules: 'You made it out, onto an island. Here every <b>knight always tells the truth</b> and every <b>knave always lies</b>. Three islanders, three statements: work out who is who.',
+      l2Do: 'Read what each islander says, then mark each one as a knight or a knave.',
+      l2Scene: 'A sunny island with the islanders standing in a row, labelled with letters.',
+      kkSays: 'says:', kkWhoIs: w => `${w} is a…`, knight: 'Knight', knave: 'Knave',
+      kkCue: 'Mark every islander first.', kkLock: 'Lock in my answer',
+      kkRight: 'Correct!', kkWrong: 'Not quite',
+      kkIs: (w, kn) => `${w} is a ${kn ? 'knight' : 'knave'}`, kkFacts: list => `The answer: ${list}.`,
+      kkGood: 'Well reasoned!', kkBad: 'The islanders laugh',
+      kkExplain: 'Be ready to explain your reasoning.'
     },
     hi: {
       title: '<em>दो</em> पहरेदार',
@@ -467,7 +565,18 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
       truth: 'सच्चा', liar: 'झूठा',
       shuffle: 'पहरेदार जगह बदल रहे हैं…', daylight: 'उजाला!', dragon: 'ड्रैगन जाग गया',
       escaped: 'आप बच निकले', lair: 'ड्रैगन की मांद में',
-      facts: (l, s) => `इस राउंड में ${l === 'L' ? 'बायाँ' : 'दायाँ'} पहरेदार झूठा था, और ${s === 'L' ? 'बायाँ' : 'दायाँ'} दरवाज़ा बाहर का रास्ता था।`
+      facts: (l, s) => `इस राउंड में ${l === 'L' ? 'बायाँ' : 'दायाँ'} पहरेदार झूठा था, और ${s === 'L' ? 'बायाँ' : 'दायाँ'} दरवाज़ा बाहर का रास्ता था।`,
+      walk: 'दरवाज़े से बाहर चलें →',
+      l2Label: 'लेवल 2', l2Title: 'कौन क्या है?', l2Name: '<em>सत्यवादी</em> और झूठे',
+      l2Rules: 'आप बाहर निकलकर एक द्वीप पर पहुँच गए। यहाँ हर <b>सत्यवादी हमेशा सच बोलता है</b> और हर <b>झूठा हमेशा झूठ बोलता है</b>। तीन द्वीपवासी, तीन बातें: पता लगाइए कौन क्या है।',
+      l2Do: 'हर द्वीपवासी की बात पढ़ें, फिर हर एक को सत्यवादी या झूठा चुनें।',
+      l2Scene: 'धूप वाला द्वीप, जहाँ अक्षरों वाले द्वीपवासी एक कतार में खड़े हैं।',
+      kkSays: 'कहता है:', kkWhoIs: w => `${w} कौन है?`, knight: 'सत्यवादी', knave: 'झूठा',
+      kkCue: 'पहले हर द्वीपवासी को चुनें।', kkLock: 'मेरा जवाब पक्का करें',
+      kkRight: 'सही जवाब!', kkWrong: 'पूरा सही नहीं',
+      kkIs: (w, kn) => `${w} ${kn ? 'सत्यवादी' : 'झूठा'} है`, kkFacts: list => `सही जवाब: ${list}।`,
+      kkGood: 'शाबाश!', kkBad: 'द्वीपवासी हँस पड़े',
+      kkExplain: 'अपना तर्क बताने के लिए तैयार रहें।'
     },
     hl: {
       title: '<em>Do</em> Guards',
@@ -486,7 +595,18 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
       truth: 'Sachcha', liar: 'Jhootha',
       shuffle: 'Guards jagah badal rahe hain…', daylight: 'Ujaala!', dragon: 'Dragon jaag gaya',
       escaped: 'Aap bach nikle', lair: 'Dragon ki maand mein',
-      facts: (l, s) => `Is round mein ${name(l)} guard jhootha tha, aur ${name(s)} darwaaza bahar ka raasta tha.`
+      facts: (l, s) => `Is round mein ${name(l)} guard jhootha tha, aur ${name(s)} darwaaza bahar ka raasta tha.`,
+      walk: 'Darwaaze se bahar chaliye →',
+      l2Label: 'Level 2', l2Title: 'Kaun kya hai?', l2Name: 'Knights aur <em>Knaves</em>',
+      l2Rules: 'Aap bahar nikal kar ek island par pahunch gaye. Yahan har <b>knight hamesha sach bolta hai</b> aur har <b>knave hamesha jhooth bolta hai</b>. Teen islanders, teen baatein: pata lagaiye kaun kya hai.',
+      l2Do: 'Har islander ki baat padhiye, phir har ek ko knight ya knave mark kariye.',
+      l2Scene: 'Dhoop wala island, jahan letters wale islanders ek line mein khade hain.',
+      kkSays: 'kehta hai:', kkWhoIs: w => `${w} kaun hai?`, knight: 'Knight', knave: 'Knave',
+      kkCue: 'Pehle har islander ko mark kariye.', kkLock: 'Answer lock kariye',
+      kkRight: 'Sahi jawaab!', kkWrong: 'Poora sahi nahi',
+      kkIs: (w, kn) => `${w} ${kn ? 'knight' : 'knave'} hai`, kkFacts: list => `Sahi jawaab: ${list}.`,
+      kkGood: 'Shabaash!', kkBad: 'Islanders hans pade',
+      kkExplain: 'Apna reasoning batane ke liye ready rahiye.'
     }
   };
   const LANGS = { en: 'en', hi: 'hi', hl: 'hi-Latn' };
@@ -554,7 +674,9 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
     speak: n => { for (let i = 0; i < n; i++) tone(170 + Math.random() * 90, 0.06, { at: i * 0.085, vol: 0.045 }); },
     creak: () => { tone(70, 0.85, { type: 'sawtooth', to: 150, vol: 0.035 }); hiss(0.85, { filter: 'bandpass', freq: 300, to: 900, vol: 0.05 }); },
     escape: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.22, { type: 'triangle', at: i * 0.1, vol: 0.07 })),
-    roar: () => { hiss(1.3, { freq: 1400, to: 160, vol: 0.28 }); tone(120, 1.2, { type: 'sawtooth', to: 40, vol: 0.09 }); }
+    roar: () => { hiss(1.3, { freq: 1400, to: 160, vol: 0.28 }); tone(120, 1.2, { type: 'sawtooth', to: 40, vol: 0.09 }); },
+    arrive: () => { hiss(1.2, { filter: 'bandpass', freq: 500, to: 300, vol: 0.05 }); [784, 988, 1175].forEach((f, i) => tone(f, 0.3, { type: 'sine', at: 0.15 + i * 0.12, vol: 0.05 })); },
+    buzz: () => tone(200, 0.4, { type: 'sawtooth', to: 90, vol: 0.06 })
   };
 
   const other = s => (s === 'L' ? 'R' : 'L');
@@ -569,6 +691,7 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
     const hops = reduced ? 0 : 5 + Math.floor(Math.random() * 4);
     const startSwap = coin();
     st = {
+      level: 1, kk: null,
       safe: coin() ? 'L' : 'R',
       liar: coin() ? 'L' : 'R',
       target: null, asked: null, answer: null, answerSide: null, answerAt: 0,
@@ -588,15 +711,29 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
   }
   const tabOf = slot => st.bodies.find(b => b.slot === slot).tab;
 
-  // One round per device: once a question is asked, a reload brings back the same round.
+  // One round per device: once a question is asked, a reload brings back the same round (and Level 2, once reached).
   const KEY = 'twoGuards.round';
   function save() {
     const r = { s: st.safe, l: st.liar, t: st.answerSide, q: st.asked, c: st.chosen, b: st.bodies.map(b => [TABARDS.indexOf(b.tab), b.slot]), k: st.looks, o: st.order };
-    try { localStorage.setItem(KEY, btoa(JSON.stringify(r))); } catch (e) {}
+    if (st.level === 2) Object.assign(r, { v: 2, kk: { p: st.kk.p, m: st.kk.marks, l: st.kk.locked, b: st.kk.tabs } });
+    try { localStorage.setItem(KEY, btoa(unescape(encodeURIComponent(JSON.stringify(r))))); } catch (e) {}
+  }
+  function restoreKK(r) {
+    const P = KK[r.kk && r.kk.p];
+    if (r.v !== 2 || r.c !== r.s || !P) return;
+    const people = P.says.map(s => s.who);
+    const tabs = Array.isArray(r.kk.b) && r.kk.b.length === people.length && r.kk.b.every(i => TABARDS[i]) ? r.kk.b : people.map((_, i) => i);
+    const marks = {};
+    people.forEach(w => { if (r.kk.m && (r.kk.m[w] === 'knight' || r.kk.m[w] === 'knave')) marks[w] = r.kk.m[w]; });
+    const locked = !!r.kk.l && people.every(w => marks[w]);
+    st.level = 2;
+    st.kk = { p: r.kk.p, marks, locked, tabs };
+    st.phase = locked ? 'kkdone' : 'kk';
+    buildKK();
   }
   function restore() {
     try {
-      const r = JSON.parse(atob(localStorage.getItem(KEY) || ''));
+      const r = JSON.parse(decodeURIComponent(escape(atob(localStorage.getItem(KEY) || ''))));
       const side = v => v === 'L' || v === 'R';
       if (![r.s, r.l, r.t].every(side) || !QUESTIONS.some(q => q.id === r.q) || (r.c && !side(r.c))) return false;
       const bodies = r.b.map(([i, slot]) => ({ tab: TABARDS[i], slot }));
@@ -604,11 +741,13 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
       const ids = QUESTIONS.map(q => q.id);
       const order = Array.isArray(r.o) && r.o.length === ids.length && ids.every(id => r.o.includes(id)) ? r.o : ids;
       st = {
+        level: 1, kk: null,
         safe: r.s, liar: r.l, target: r.t, asked: r.q, answer: null, answerSide: r.t, answerAt: -1e9,
         chosen: r.c || null, open: r.c ? 1 : 0, openStart: 0, phase: r.c ? 'done' : 'play', hover: null,
         bodies, looks: r.k, order, hops: 0, shuffleStart: 0
       };
       st.answer = answerFor(st.asked, st.answerSide);
+      restoreKK(r);
       orderQuestions();
       renderUI();
       return true;
@@ -882,16 +1021,119 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
     });
   }
 
+  // ---------- Level 2 scene ----------
+  function buildIsland() {
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    let seed = 7;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const sky = g.createLinearGradient(0, 0, 0, 58);
+    sky.addColorStop(0, '#5aa4d8'); sky.addColorStop(1, '#f2e2b0');
+    g.fillStyle = sky; g.fillRect(0, 0, W, 58);
+    // sun
+    g.fillStyle = '#fff6c9'; g.fillRect(150, 12, 9, 9); g.fillRect(149, 13, 11, 7); g.fillRect(151, 11, 7, 11);
+    // sea and a far island
+    g.fillStyle = '#3e7fb0'; g.fillRect(0, 58, W, 9);
+    g.fillStyle = '#5a9ac8';
+    for (let x = 0; x < W; x += 9) g.fillRect(x + (x % 2) * 3, 60 + (x % 3), 4, 1);
+    g.fillStyle = '#4f8a5a'; g.fillRect(24, 56, 26, 2); g.fillRect(28, 54, 18, 2); g.fillRect(33, 53, 8, 1);
+    // beach and grass
+    g.fillStyle = '#e8d49a'; g.fillRect(0, 67, W, 3);
+    g.fillStyle = '#5c9446'; g.fillRect(0, 70, W, H - 70);
+    g.fillStyle = '#77ad55';
+    for (let i = 0; i < 70; i++) g.fillRect(Math.floor(rnd() * W), 71 + Math.floor(rnd() * (H - 72)), 2, 1);
+    g.fillStyle = '#d4bb80';
+    for (let y = 76; y < H; y++) { const half = 5 + (y - 76) * 0.9; g.fillRect(Math.round(96 - half), y, Math.round(half * 2), 1); }
+    // palm trees
+    for (const px of [12, 176]) {
+      for (let y = 38; y < 90; y++) {
+        const x = px + Math.round(Math.sin((90 - y) / 22) * (px < 96 ? 3 : -3));
+        g.fillStyle = y % 4 ? '#7a5530' : '#5a3a22'; g.fillRect(x, y, 3, 1);
+      }
+      const tx = px + Math.round(Math.sin(52 / 22) * (px < 96 ? 3 : -3)) + 1, ty = 38;
+      g.fillStyle = '#3f7a4a';
+      for (const [dx, dy] of [[-1, 0], [1, 0], [-1, 1], [1, 1]]) {
+        for (let i = 1; i < 12; i++) g.fillRect(tx + dx * i, ty + Math.round(i * i / 14) * (dy ? 1 : 0) + (dy ? 0 : Math.round(i * i / 28)), 2, 1);
+      }
+      g.fillStyle = '#55995f'; g.fillRect(tx - 2, ty - 2, 5, 2);
+    }
+    return c;
+  }
+  const island = buildIsland();
+  const kkXs = n => (n === 2 ? [64, 116] : [42, 90, 138]);
+
+  function drawIslander(gx, tab, t, i) {
+    const pal = { h: '#3a2a1c', H: '#5a3a22', k: '#3a2a1c', s: '#d9a77c', e: '#1b1d24', m: '#7a4a3a', c: '#d9a77c', a: tab.c, A: tab.l, E: tab.c, b: '#3a2a1c', B: '#d9b347', l: '#4a3a2a', f: '#1e1a17' };
+    const top = GTOP - (!reduced && Math.floor(t / 700 + i * 1.3) % 2 ? 1 : 0);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(gx - 1, FLOOR - 1, 14, 2);
+    ctx.fillStyle = OUTLINE;
+    for (let r = 0; r < GUARD.length; r++) for (let c = 0; c < 12; c++) {
+      if (GUARD[r][c] !== '.') ctx.fillRect(gx + c - 1, top + r - 1, 3, 3);
+    }
+    for (let r = 0; r < GUARD.length; r++) for (let c = 0; c < 12; c++) {
+      const ch = GUARD[r][c];
+      if (ch === '.') continue;
+      ctx.fillStyle = pal[ch]; ctx.fillRect(gx + c, top + r, 1, 1);
+    }
+  }
+
+  function drawIsland(t) {
+    ctx.drawImage(island, 0, 0);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    [[0, 14], [90, 26], [150, 8]].forEach(([base, y]) => {
+      const x = ((reduced ? base : base + t * 0.004) % (W + 30)) - 20;
+      ctx.fillRect(Math.round(x), y, 16, 3); ctx.fillRect(Math.round(x) + 4, y - 2, 8, 2);
+    });
+    if (!reduced && Math.floor(t / 600) % 2) {
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      for (let x = 5; x < W; x += 23) ctx.fillRect(x, 63, 3, 1);
+    }
+    const P = KK[st.kk.p], xs = kkXs(P.says.length);
+    P.says.forEach((s, i) => drawIslander(xs[i], TABARDS[st.kk.tabs[i]], t, i));
+    if (st.phase === 'arrive') {
+      const p = reduced ? 1 : Math.min(1, (t - st.arriveStart) / 800);
+      ctx.fillStyle = `rgba(255,244,214,${1 - p})`; ctx.fillRect(0, 0, W, H);
+      if (p >= 1) { st.phase = 'kk'; renderUI(); }
+    }
+  }
+
+  // The walk out: the camera zooms into the open exit door with a gentle step bob, then fades to daylight.
+  const WALK_MS = 2400;
+  function camera(t) {
+    const p = Math.min(1, (t - st.walkStart) / WALK_MS);
+    const e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+    const d = DOORS[st.safe];
+    const fx = d.x + d.w / 2, fy = d.top + (FLOOR - d.top) * 0.5;
+    const aim = Math.min(1, e * 1.6);
+    const cx = W / 2 + (fx - W / 2) * aim, cy = H / 2 + (fy - H / 2) * aim;
+    const s = 1 + 7 * e;
+    const bob = Math.sin(p * Math.PI * 14) * 1.2 * (1 - e * 0.5);
+    return { p, s, x: W / 2 - cx * s, y: H / 2 - cy * s + bob, fade: Math.max(0, (p - 0.72) / 0.28) };
+  }
+
   function loop(t) {
     if (!reduced && t - lastFlick > 90) {
       lastFlick = t;
       flick = flick.map(() => Math.random());
       fire = fire.map((v, i) => 6 + Math.round(Math.random() * 9 + 3 * Math.sin(i / 3 + t / 300)));
     }
+    if (st.level === 2) {
+      drawIsland(t);
+      requestAnimationFrame(loop);
+      return;
+    }
     if (st.phase === 'opening') {
       const p = reduced ? 1 : Math.min(1, (t - st.openStart) / 950);
       st.open = 1 - Math.pow(1 - p, 3);
       if (p >= 1) finish();
+    }
+    let cam = null;
+    if (st.phase === 'walk') {
+      cam = camera(t);
+      const step = Math.floor(cam.p * 7);
+      if (step !== st.walkStep && cam.p < 0.9) { st.walkStep = step; SFX.hop(); }
+      if (cam.p >= 1) { enterLevel2(); requestAnimationFrame(loop); return; }
+      ctx.setTransform(cam.s, 0, 0, cam.s, cam.x, cam.y);
     }
     ctx.drawImage(wall, 0, 0);
     drawDoor('L', t); drawDoor('R', t);
@@ -919,7 +1161,9 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
     drawBody(st.bodies[1], pos[1].x, pos[1].lift, t);
     drawBody(st.bodies[0], pos[0].x, pos[0].lift, t);
     drawTorches();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(vignette, 0, 0);
+    if (cam && cam.fade) { ctx.fillStyle = `rgba(255,244,214,${cam.fade})`; ctx.fillRect(0, 0, W, H); }
     requestAnimationFrame(loop);
   }
 
@@ -994,13 +1238,118 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
   }
   $('door-L').addEventListener('click', () => choose('L'));
   $('door-R').addEventListener('click', () => choose('R'));
-  $('next').addEventListener('click', () => {
+  function startOver() {
     try { localStorage.removeItem(KEY); } catch (e) {}
     $('stage').classList.remove('shake');
     newRound();
     window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
     $('pick-L').focus({ preventScroll: true });
+  }
+  $('next').addEventListener('click', startOver);
+  $('kk-next').addEventListener('click', startOver);
+
+  $('walk').addEventListener('click', () => {
+    if (st.phase !== 'done' || st.chosen !== st.safe) return;
+    if (reduced) { enterLevel2(); return; }
+    st.phase = 'walk'; st.walkStart = performance.now(); st.walkStep = -1;
+    renderUI();
+    if (!pinnedStage.matches) window.scrollTo({ top: 0, behavior: 'smooth' });
   });
+
+  // ---------- Level 2 UI ----------
+  let kkRows = [];
+  function buildKK() {
+    const list = $('kk');
+    list.textContent = '';
+    kkRows = KK[st.kk.p].says.map(s => {
+      const li = document.createElement('li'); li.className = 'kk-row';
+      const say = document.createElement('p'); say.className = 'kk-say';
+      const who = document.createElement('b'); who.textContent = s.who;
+      const verb = document.createElement('span');
+      const quote = document.createElement('q');
+      say.append(who, ' ', verb, ' ', quote);
+      const group = document.createElement('div'); group.className = 'seg'; group.setAttribute('role', 'group');
+      const btn = v => {
+        const b = document.createElement('button');
+        b.addEventListener('click', () => markKK(s.who, v));
+        return b;
+      };
+      const knight = btn('knight'), knave = btn('knave');
+      group.append(knight, knave);
+      li.append(say, group); list.appendChild(li);
+      return { s, li, verb, quote, group, knight, knave };
+    });
+  }
+  function enterLevel2() {
+    const p = Math.floor(Math.random() * KK.length);
+    const n = KK[p].says.length;
+    st.level = 2;
+    st.kk = { p, marks: {}, locked: false, tabs: shuffled(TABARDS.map((_, i) => i)).slice(0, n) };
+    st.phase = reduced ? 'kk' : 'arrive'; st.arriveStart = performance.now();
+    buildKK();
+    save();
+    SFX.arrive();
+    renderUI();
+    if (pinnedStage.matches) $('l2').scrollIntoView({ block: 'start', behavior: reduced ? 'auto' : 'smooth' });
+    else window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
+  }
+  function markKK(who, v) {
+    if (st.level !== 2 || st.kk.locked) return;
+    if (st.kk.marks[who] !== v) SFX.tick();
+    st.kk.marks[who] = v;
+    save();
+    renderUI();
+  }
+  $('kk-lock').addEventListener('click', () => {
+    const P = KK[st.kk.p];
+    if (st.kk.locked || !P.says.every(s => st.kk.marks[s.who])) return;
+    st.kk.locked = true; st.phase = 'kkdone';
+    save();
+    const sol = solveKK(P);
+    if (P.says.every(s => (st.kk.marks[s.who] === 'knight') === sol[s.who])) SFX.escape(); else SFX.buzz();
+    renderUI();
+    $('kk-result').scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
+  });
+
+  function renderKK() {
+    const t = T(), P = KK[st.kk.p], sol = solveKK(P), done = st.kk.locked;
+    const people = P.says.map(s => s.who), xs = kkXs(people.length);
+    kkRows.forEach(r => {
+      const w = r.s.who, mark = st.kk.marks[w];
+      r.verb.textContent = t.kkSays;
+      r.quote.textContent = sayText(r.s, lang);
+      r.group.setAttribute('aria-label', t.kkWhoIs(w));
+      [['knight', r.knight], ['knave', r.knave]].forEach(([v, b]) => {
+        b.textContent = t[v];
+        b.setAttribute('aria-pressed', String(mark === v));
+        b.disabled = done;
+      });
+      r.li.classList.toggle('right', done && (mark === 'knight') === sol[w]);
+      r.li.classList.toggle('wrong', done && (mark === 'knight') !== sol[w]);
+    });
+    const all = people.every(w => st.kk.marks[w]);
+    $('kk-cue').hidden = all || done;
+    $('kk-lock').hidden = done;
+    $('kk-lock').disabled = !all;
+    [0, 1, 2].forEach(i => {
+      const tg = $('kk-tag-' + i), w = people[i];
+      tg.hidden = !w || st.phase === 'arrive';
+      if (!w) return;
+      tg.style.left = ((xs[i] + 6) / W * 100) + '%';
+      tg.className = 'tag' + (done ? (sol[w] ? ' truth' : ' liar') : ' named');
+      tg.textContent = done ? `${w} · ${sol[w] ? t.knight : t.knave}` : w;
+    });
+    const right = done && people.every(w => (st.kk.marks[w] === 'knight') === sol[w]);
+    $('kk-result').hidden = !done;
+    if (done) {
+      $('kk-title').textContent = right ? t.kkRight : t.kkWrong;
+      $('kk-title').className = right ? 'good' : 'bad';
+      $('kk-facts').textContent = t.kkFacts(people.map(w => t.kkIs(w, sol[w])).join(', '));
+    }
+    const ban = $('banner');
+    ban.hidden = !done;
+    if (done) { ban.textContent = right ? t.kkGood : t.kkBad; ban.className = 'banner ' + (right ? 'good' : 'bad'); }
+  }
 
   function finish() {
     st.open = 1; st.phase = 'done';
@@ -1025,6 +1374,7 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
     return null;
   }
   cv.addEventListener('mousemove', e => {
+    if (st.level === 2) { cv.style.cursor = 'default'; return; }
     const p = sceneXY(e);
     const d = st.phase === 'play' && st.asked ? hitDoor(p) : null;
     const g = st.phase === 'play' && !st.asked ? hitGuard(p) : null;
@@ -1033,13 +1383,26 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
   });
   cv.addEventListener('mouseleave', () => { st.hover = null; });
   cv.addEventListener('click', e => {
+    if (st.level === 2) return;
     const p = sceneXY(e);
     const d = hitDoor(p); if (d) return choose(d);
     const g = hitGuard(p); if (g) pick(g);
   });
 
   function renderUI() {
+    const l2 = st.level === 2;
+    $('l2').hidden = !l2;
+    document.querySelector('.ask-card').hidden = l2;
+    document.querySelector('.door-card').hidden = l2;
+    $('tag-L').hidden = $('tag-R').hidden = l2;
+    $('scene').setAttribute('aria-label', l2 ? T().l2Scene : T().scene);
+    $('game-title').innerHTML = l2 ? T().l2Name : T().title;
+    $('game-rules').innerHTML = l2 ? T().l2Rules : T().rules;
+    document.title = $('game-title').textContent;
+    if (l2) { $('bubble').hidden = true; renderKK(); return; }
+    [0, 1, 2].forEach(i => { $('kk-tag-' + i).hidden = true; });
     const play = st.phase === 'play';
+    const walking = st.phase === 'walk';
     ['L', 'R'].forEach(k => {
       const b = $('pick-' + k);
       b.setAttribute('aria-pressed', String(st.target === k));
@@ -1058,7 +1421,7 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
     // bubble
     const t = T();
     const bub = $('bubble');
-    if (st.answer) {
+    if (st.answer && !walking) {
       bub.hidden = false;
       bub.style.left = st.answerSide === 'L' ? '34.4%' : '65.6%';
       bub.textContent = st.answer.type === 'point'
@@ -1081,7 +1444,9 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
     // tags
     ['L', 'R'].forEach(k => {
       const tg = $('tag-' + k);
-      if (st.phase === 'done') {
+      if (walking) {
+        tg.className = 'tag dim';
+      } else if (st.phase === 'done') {
         const liar = st.liar === k;
         tg.className = 'tag ' + (liar ? 'liar' : 'truth');
         tg.textContent = liar ? t.liar : t.truth;
@@ -1093,13 +1458,16 @@ button:focus-visible { outline: 2px solid var(--torch); outline-offset: 2px; }
 
     // result
     const res = $('result'), ban = $('banner');
-    if (st.phase === 'done') {
+    if (st.phase === 'done' || walking) {
       const won = st.chosen === st.safe;
       $('r-title').textContent = won ? t.escaped : t.lair;
       $('r-title').className = won ? 'good' : 'bad';
       $('r-facts').textContent = t.facts(st.liar, st.safe);
       res.hidden = false;
-      ban.hidden = false;
+      $('walk').hidden = !won;
+      $('walk').disabled = walking;
+      $('next').disabled = walking;
+      ban.hidden = walking;
       ban.textContent = won ? t.daylight : t.dragon;
       ban.className = 'banner ' + (won ? 'good' : 'bad');
     } else {
